@@ -18,9 +18,13 @@ from happymimi_manipulation_msgs.srv import ArmControl
 
 class MotorController(object):
     def __init__(self):
+        #モータの角度検出？
         rospy.Subscriber('/dynamixel_workbench/dynamixel_state',DynamixelStateList,self.getMotorStateCB)
+        #モータ動かすパブリッシャー
         self.motor_pub = rospy.Publisher('/dynamixel_workbench/joint_trajectory',JointTrajectory,queue_size=10)
+        #各モータの角度のリストパブリッシャー？
         self.motor_angle_pub = rospy.Publisher('/servo/angle_list',Float64MultiArray,queue_size=10)
+        #モータ動かすサービスクライアント
         self.motor_client = rospy.ServiceProxy('/dynamixel_workbench/dynamixel_command',DynamixelCommand)
         # -- Motor Parameters --
         self.origin_angle = rosparam.get_param('/mimi_specification/Origin_Angle')
@@ -29,6 +33,7 @@ class MotorController(object):
         self.torque_error = [0]*6
         self.rotation_velocity = [0]*6
 
+        #2秒ごとにself.motorAnglePubを起動
         rospy.Timer(rospy.Duration(0.5), self.motorAnglePub)
 
     def getMotorStateCB(self, state):
@@ -48,6 +53,7 @@ class MotorController(object):
         self.motor_angle_pub.publish(pub_deg_list)
 
     def degToStep(self,deg):
+        # degを4095段階のstep(12bit)に変換
         return int((deg+180)/360.0*4095)
 
     def stepToDeg(self,step):
@@ -69,12 +75,16 @@ class MotorController(object):
         msg.points[0].time_from_start = rospy.Time(execute_time)
         self.motor_pub.publish(msg)
 
+    #このスクリプト内だと、motor_id=4or5, position_value
     def setPosition(self, motor_id, position_value):
         if type(position_value) == type(float()):
             rotate_value = self.degToStep(positionon_value)
+        # 目標角度を指定
         res = self.motor_client('', motor_id, 'Goal_Position', position_value)
 
+    #このスクリプト内だと、motor_id=4, current_value=200
     def setCurrent(self, motor_id, current_value):
+        # 許容電圧を指定
         res = self.motor_client('', motor_id, 'Goal_Current', current_value)
 
 
