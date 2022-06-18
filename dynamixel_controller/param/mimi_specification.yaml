@@ -5,5 +5,7 @@ Shoulder_Elbow_Length: 0.22
 Elbow_Wrist_Length: 0.17
 Wrist_Endeffector_Length: 0.17
 
-Origin_Angle: [980, 3040, 2065, 2065, 2150, 1794]
+#アームを地面と水平にしたときの各モータの角度値
+#             [-94°, 87° , 0° , 0°  , 9°  , -22°] 
+Origin_Angle: [980, 3040, 2065, 2065, 2150, 1794] #[肩, 肩, 肘, 手首, eef, 首]
 Gear_Ratio: [2.1, 2.1, 1, 1, 1, 1]

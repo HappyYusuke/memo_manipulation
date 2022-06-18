@@ -1,0 +1,4 @@
+rospy.Subscriber('/dynamixel_workbench/dynamixel_state' ,DynamixelStateList ,self.getMotorStateCB)
+
+self.motor_angle_pub = rospy.Publisher('/servo/angle_list',Float64MultiArray,queue_size=10)
+

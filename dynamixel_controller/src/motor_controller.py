@@ -5,7 +5,7 @@ import rospy
 import rosparam
 import numpy
 import math
-import threading
+import threading #並列処理のために
 import time
 from std_msgs.msg import Bool, Float64, Float64MultiArray
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
@@ -18,7 +18,7 @@ from happymimi_manipulation_msgs.srv import ArmControl
 
 class MotorController(object):
     def __init__(self):
-        #モータの角度検出？
+        #モータの角度、速度を取得
         rospy.Subscriber('/dynamixel_workbench/dynamixel_state',DynamixelStateList,self.getMotorStateCB)
         #モータ動かすパブリッシャー
         self.motor_pub = rospy.Publisher('/dynamixel_workbench/joint_trajectory',JointTrajectory,queue_size=10)
@@ -26,29 +26,36 @@ class MotorController(object):
         self.motor_angle_pub = rospy.Publisher('/servo/angle_list',Float64MultiArray,queue_size=10)
         #モータ動かすサービスクライアント
         self.motor_client = rospy.ServiceProxy('/dynamixel_workbench/dynamixel_command',DynamixelCommand)
-        # -- Motor Parameters --
+        # -- Motor Parameters -- (mimi_specification)
+        #地面とアームを水平にしたときの角度値
         self.origin_angle = rosparam.get_param('/mimi_specification/Origin_Angle')
+        #ギア比
         self.gear_ratio = rosparam.get_param('/mimi_specification/Gear_Ratio')
-        self.current_pose = [0]*6
+        self.current_pose = [0]*6 #[0, 0, 0, 0, 0, 0]
         self.torque_error = [0]*6
         self.rotation_velocity = [0]*6
 
         #2秒ごとにself.motorAnglePubを起動
         rospy.Timer(rospy.Duration(0.5), self.motorAnglePub)
 
+    # 現在のモータの「角度、速度、外乱(?)」を検出
     def getMotorStateCB(self, state):
-        for i in range(len(state.dynamixel_state)):
-            self.current_pose[i] = state.dynamixel_state[i].present_position
-            self.rotation_velocity[i] = abs(state.dynamixel_state[i].present_velocity)
-            self.torque_error[i] = state.dynamixel_state[i].present_current
+        for i in range(len(state.dynamixel_state)): #len -> モータの数
+            self.current_pose[i] = state.dynamixel_state[i].present_position #角度値(パルス数)
+            self.rotation_velocity[i] = abs(state.dynamixel_state[i].present_velocity) #速度
+            self.torque_error[i] = state.dynamixel_state[i].present_current #外乱(?)
 
+    # モータの角度パブリッシュ
     def motorAnglePub(self, event):
+        # パルス値から度数法に変換
         deg_origin_angle = map(self.stepToDeg, self.origin_angle)
         deg_current_pose = map(self.stepToDeg, self.current_pose)
+        # (現在のパルス値) - (オリジンパルス値) = 現在のモータのパルス値(オリジン基準)
         current_deg_list = [x-y for (x,y) in zip(deg_current_pose, deg_origin_angle)]
-        current_deg_list = [round(x, 1) for x in current_deg_list]
-        current_deg_list[2] *= -1
+        current_deg_list = [round(x, 1) for x in current_deg_list] # 少数第2位を四捨五入
+        current_deg_list[2] *= -1 
         current_deg_list[5] *= -1
+        # Float64MultiArray => リストのメッセージ型
         pub_deg_list = Float64MultiArray(data=current_deg_list)
         self.motor_angle_pub.publish(pub_deg_list)
 
@@ -63,8 +70,9 @@ class MotorController(object):
         return int((rad + math.pi) / (2*math.pi) * 4095)
 
     def stepToRad(self,step):
-        return step / 4095.0 * 2*math.pi - math.pi
+        return step / 4095.0 * 2*math.pi - math.pi # - math.pi => 原点が180°だから
 
+    # モータを動かす
     def motorPub(self, joint_name, joint_angle, execute_time=0.8):
         msg = JointTrajectory()
         msg.header.stamp = rospy.Time.now()
@@ -98,8 +106,8 @@ class JointController(MotorController):
         rospy.Subscriber('/servo/head',Float64,self.controlHead)
 
     def shoulderConversionProcess(self, deg):
-        deg *= self.gear_ratio[0]
-        rad = math.radians(deg)
+        deg *= self.gear_ratio[0] #ギア比: 2.1
+        rad = math.radians(deg) #度数法からラジアンに変換
         print 'rad: ', rad
         #m0_rad = math.pi - rad + self.stepToRad(self.origin_angle[0])
         m0_rad = -1*rad + self.stepToRad(self.origin_angle[0])
@@ -177,7 +185,7 @@ class JointController(MotorController):
             deg = deg.data
         except AttributeError:
             pass
-        deg *= self.gear_ratio[5]
+        deg *= self.gear_ratio[5] #ギア比: 1
         step = self.degToStep(deg) + (self.origin_angle[5]-2048)
         self.setPosition(5, step)
 
@@ -187,16 +195,17 @@ class ManipulateArm(JointController):
         super(ManipulateArm,self).__init__()
         rospy.Service('/servo/arm', StrTrg, self.changeArmPose)
         rospy.Service('/servo/debug_arm', ArmControl, self.armControlService)
-        self.detect_depth = rospy.ServiceProxy('/detect/depth', PositionEstimator)
+        self.detect_depth = rospy.ServiceProxy('/detect/depth', PositionEstimator) #物体の位置推定?
         self.arm_specification = rosparam.get_param('/mimi_specification')
 
+    # 逆運動学
     def inverseKinematics(self, coordinate):
         x = coordinate[0]
         y = coordinate[1]
-        l0 = self.arm_specification['Ground_Arm_Height']
-        l1 = self.arm_specification['Shoulder_Elbow_Length']
-        l2 = self.arm_specification['Elbow_Wrist_Length']
-        l3 = self.arm_specification['Wrist_Endeffector_Length']
+        l0 = self.arm_specification['Ground_Arm_Height'] #アームの高さ
+        l1 = self.arm_specification['Shoulder_Elbow_Length'] #肩から肘の長さ
+        l2 = self.arm_specification['Elbow_Wrist_Length'] #肘から手首の長さ
+        l3 = self.arm_specification['Wrist_Endeffector_Length'] #手首からエンドエフェクタの長さ
         x -= l3
         y -= l0
 
@@ -204,16 +213,21 @@ class ManipulateArm(JointController):
         data2 =  2*l1*math.sqrt(x*x+y*y)
 
         try:
+            #肩
             shoulder_angle = -1*math.acos((x*x+y*y+l1*l1-l2*l2) / (2*l1*math.sqrt(x*x+y*y))) + math.atan(y/x)# -1倍の有無で別解
+            #肘
             elbow_angle = math.atan((y-l1*math.sin(shoulder_angle))/(x-l1*math.cos(shoulder_angle)))-shoulder_angle
+            #手首
             wrist_angle = -1*(shoulder_angle + elbow_angle)
             angle_list = [shoulder_angle, elbow_angle, wrist_angle]
+            #angle_listを度数法に変換
             angle_list = map(math.degrees, angle_list)
             return angle_list
         except ValueError:
             rospy.loginfo('can not move arm.')
             return [numpy.nan]*3
 
+    #アームを動かす(armControllerBytopicで並列処理できるからここは使われてない)
     def armController(self, joint_angle):
         try:
             joint_angle = joint_angle.data
@@ -228,17 +242,18 @@ class ManipulateArm(JointController):
         #rospy.sleep(0.5)
         thread_shoulder.start()
 
-    def armControllerByTopic(self, joint_angle):
+    #アームをトピックで動かす
+    def armControllerByTopic(self, joint_angle): #joint_angleは逆運動学の計算結果
         m0, m1 = self.shoulderConversionProcess(joint_angle[0])
         m2 = self.elbowConversionProcess(joint_angle[1])
         m3 = self.wristConversionProcess(joint_angle[2])
 
         print 'm0, m1, m2, m3'
         print m0, m1, m2, m3
-        print map(math.degrees, [m0, m1, m2, m3])
-        self.motorPub(['m0_shoulder_left_joint', 'm1_shoulder_right_joint', 'm2_elbow_joint', 'm3_wrist_joint'], [m0, m1, m2, m3])
+        print map(math.degrees, [m0, m1, m2, m3]) #度数法に変換
+        self.motorPub(['m0_shoulder_left_joint', 'm1_shoulder_right_joint', 'm2_elbow_joint', 'm3_wrist_joint'], [m0, m1, m2, m3]) #アームを動かす
 
-    def armControlService(self, coordinate):
+    def armControlService(self, coordinate): #サービスクライアントからの引数
         try:
             coordinate = coordinate.data
         except AttributeError:
@@ -247,13 +262,14 @@ class ManipulateArm(JointController):
         print ''
         print 'joint_angle'
         print joint_angle
-        if numpy.nan in joint_angle:
+        #非数かどうかを判定
+        if numpy.nan in joint_angle: #非数かどうか確認
             return False
         #self.armController(joint_angle)
         self.armControllerByTopic(joint_angle)
         return True
 
-    def changeArmPose(self, cmd):
+    def changeArmPose(self, cmd): #cmd: サービスクライアントからの引数
         if type(cmd) != str:
             cmd = cmd.data
         rospy.loginfo('Change arm command : %s'%cmd)
@@ -323,7 +339,7 @@ class ManipulateArm(JointController):
         start_time = time.time()
         straight_line_distance = 9.99
         while time.time()-start_time<3.0 and straight_line_distance>0.42 and not rospy.is_shutdown():
-            depth_res = self.detect_depth(280, 365)
+            depth_res = self.detect_depth(280, 365) #物体の位置推定？
             straight_line_distance = depth_res.point.x
         rospy.sleep(0.5)
         endeffector_res = self.controlEndeffector(True)
@@ -344,6 +360,7 @@ class ManipulateArm(JointController):
         '''
         while self.rotation_velocity[3] > 0 and not rospy.is_shutdown():
             pass
+
         rospy.sleep(1.0)
         '''
         wrist_error = abs(self.torque_error[3])
