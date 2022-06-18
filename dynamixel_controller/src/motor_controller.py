@@ -74,6 +74,7 @@ class MotorController(object):
 
     # モータを動かす
     def motorPub(self, joint_name, joint_angle, execute_time=0.8):
+        # Publishするデータの定義
         msg = JointTrajectory()
         msg.header.stamp = rospy.Time.now()
         msg.joint_names = joint_name
