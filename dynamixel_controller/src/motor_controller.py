@@ -70,7 +70,7 @@ class MotorController(object):
         return int((rad + math.pi) / (2*math.pi) * 4095)
 
     def stepToRad(self,step):
-        return step / 4095.0 * 2*math.pi - math.pi # - math.pi => 原点が180°だから
+        return step / 4095.0 * 2*math.pi - math.pi # - math.pi => 原点が180°だから0°にしたい
 
     # モータを動かす
     def motorPub(self, joint_name, joint_angle, execute_time=0.8):
@@ -106,11 +106,13 @@ class JointController(MotorController):
         rospy.Subscriber('/servo/endeffector',Bool,self.controlEndeffector)
         rospy.Subscriber('/servo/head',Float64,self.controlHead)
 
+    # 変換処理
     def shoulderConversionProcess(self, deg):
-        deg *= self.gear_ratio[0] #ギア比: 2.1
+        deg *= self.gear_ratio[0] #指定の角度*2.1(ギア比)
         rad = math.radians(deg) #度数法からラジアンに変換
         print 'rad: ', rad
         #m0_rad = math.pi - rad + self.stepToRad(self.origin_angle[0])
+        # originが基準だから、肩はoriginが90°、つまり、originから30°動かしたかったら90°-30°=60°動かす
         m0_rad = -1*rad + self.stepToRad(self.origin_angle[0])
         m1_rad = rad + self.stepToRad(self.origin_angle[1])
         print 'm0_origin', self.stepToRad(self.origin_angle[0])
