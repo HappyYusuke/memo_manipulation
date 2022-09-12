@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*
 
 import rospy
@@ -22,7 +22,7 @@ class MotorController(object):
         rospy.Subscriber('/dynamixel_workbench/dynamixel_state',DynamixelStateList,self.getMotorStateCB)
         #モータ動かすパブリッシャー
         self.motor_pub = rospy.Publisher('/dynamixel_workbench/joint_trajectory',JointTrajectory,queue_size=10)
-        #各モータの角度のリストパブリッシャー？
+        #全モータの角度を出力するパブリッシャ
         self.motor_angle_pub = rospy.Publisher('/servo/angle_list',Float64MultiArray,queue_size=10)
         #モータ動かすサービスクライアント
         self.motor_client = rospy.ServiceProxy('/dynamixel_workbench/dynamixel_command',DynamixelCommand)
@@ -104,7 +104,7 @@ class JointController(MotorController):
         rospy.Subscriber('/servo/elbow',Float64,self.controlElbow)
         rospy.Subscriber('/servo/wrist',Float64,self.controlWrist)
         rospy.Subscriber('/servo/endeffector',Bool,self.controlEndeffector)
-        rospy.Subscriber('/servo/head',Float64,self.controlHead)
+        rospy.Subscriber('/servo/head',Float64,self.controlHead) #-30~40[deg]の範囲
 
     # 変換処理
     def shoulderConversionProcess(self, deg):
@@ -112,7 +112,7 @@ class JointController(MotorController):
         rad = math.radians(deg) #度数法からラジアンに変換
         print 'rad: ', rad
         #m0_rad = math.pi - rad + self.stepToRad(self.origin_angle[0])
-        # originが基準だから、肩はoriginが90°、つまり、originから30°動かしたかったら90°-30°=60°動かす
+        # originが基準だから、肩はoriginが90°(仮定)、つまり、originから30°動かしたかったら90°-30°=60°動かす
         m0_rad = -1*rad + self.stepToRad(self.origin_angle[0])
         m1_rad = rad + self.stepToRad(self.origin_angle[1])
         print 'm0_origin', self.stepToRad(self.origin_angle[0])
@@ -196,8 +196,8 @@ class JointController(MotorController):
 class ManipulateArm(JointController):
     def __init__(self):
         super(ManipulateArm,self).__init__()
-        rospy.Service('/servo/arm', StrTrg, self.changeArmPose)
-        rospy.Service('/servo/debug_arm', ArmControl, self.armControlService)
+        rospy.Service('/servo/arm', StrTrg, self.changeArmPose) #originとかcarryとか...
+        rospy.Service('/servo/debug_arm', ArmControl, self.armControlService) #わからん
         self.detect_depth = rospy.ServiceProxy('/detect/depth', PositionEstimator) #物体の位置推定?
         self.arm_specification = rosparam.get_param('/mimi_specification')
 
@@ -247,6 +247,7 @@ class ManipulateArm(JointController):
 
     #アームをトピックで動かす
     def armControllerByTopic(self, joint_angle): #joint_angleは逆運動学の計算結果
+        # Originの位置から各モータを何度動かすか計算する
         m0, m1 = self.shoulderConversionProcess(joint_angle[0])
         m2 = self.elbowConversionProcess(joint_angle[1])
         m3 = self.wristConversionProcess(joint_angle[2])
@@ -272,7 +273,7 @@ class ManipulateArm(JointController):
         self.armControllerByTopic(joint_angle)
         return True
 
-    def changeArmPose(self, cmd): #cmd: サービスクライアントからの引数
+    def changeArmPose(self, cmd): #cmd: サービスクライアントからの引数(originとかcarryとか)
         if type(cmd) != str:
             cmd = cmd.data
         rospy.loginfo('Change arm command : %s'%cmd)

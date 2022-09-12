@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*
 
 import rospy
@@ -15,8 +15,6 @@ from std_msgs.msg import Bool, Float64, String
 from geometry_msgs.msg import Twist
 from geometry_msgs.msg import Point
 
-from happymimi_msgs.srv import StrTrg
-from happymimi_manipulation_msgs.msg import *
 
 motor_controller_path = roslib.packages.get_pkg_dir('dynamixel_controller')
 sys.path.insert(0, os.path.join(motor_controller_path, 'src/'))
@@ -29,20 +27,20 @@ from base_control import BaseControl
 class GraspingActionServer(ManipulateArm):
     def __init__(self):
         super(GraspingActionServer,self).__init__()
-        rospy.Subscriber('/current_location',String,self.navigationPlaceCB)
-        self.cmd_vel_pub = rospy.Publisher('/cmd_vel_mux/input/teleop',Twist,queue_size = 1)
-        self.navigation_place = 'Null'
-        self.target_place = rosparam.get_param('/location_dict')
+        rospy.Subscriber('/current_location',String,self.navigationPlaceCB)   # 現在地をサブスクライブ
+        self.cmd_vel_pub = rospy.Publisher('/cmd_vel_mux/input/teleop',Twist,queue_size = 1)   # base_control用のパブリッシャ
+        self.navigation_place = 'Null'   # 現在位置格納用変数
+        self.target_place = rosparam.get_param('/location_dict')   # オブジェクトの座標を取得
 
         self.base_control = BaseControl()
 
-        self.act = actionlib.SimpleActionServer('/manipulation/grasp',
-                                                GraspingObjectAction,
-                                                execute_cb = self.actionMain,
-                                                auto_start = False)
-        self.act.register_preempt_callback(self.actionPreempt)
+        self.act = actionlib.SimpleActionServer('/manipulation/grasp',         # アクションサーバ定義
+                                                GraspingObjectAction,          # 独自型
+                                                execute_cb = self.actionMain,  # コールバック関数を指定
+                                                auto_start = False)            #サーバの自動起動を無効にするためにFalseを指定
+        self.act.register_preempt_callback(self.actionPreempt)   # 実行中のプログラムを強制的に一時中断し、他のプログラムを実行する
 
-        self.act.start()
+        self.act.start()   # アクションサーバ起動
 
     def placeMode(self):#override
         self.base_control.translateDist(-0.15)
@@ -50,7 +48,7 @@ class GraspingActionServer(ManipulateArm):
         y = self.target_place[self.navigation_place] + 0.14
         #x = (y-0.78)/10+0.5
         x = 0.5
-        joint_angle = self.inverseKinematics([x, y])
+        joint_angle = self.inverseKinematics([x, y])   # 逆運動学
         if numpy.nan in joint_angle:
             return False
 
@@ -130,7 +128,7 @@ class GraspingActionServer(ManipulateArm):
         return grasp_flg
 
     def navigationPlaceCB(self,res):
-        self.navigation_place = res.data
+        self.navigation_place = res.data  # 現在位置を格納
 
     def startUp(self):
         _ = self.controlEndeffector(False)
