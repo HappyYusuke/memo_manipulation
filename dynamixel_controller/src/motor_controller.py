@@ -205,9 +205,9 @@ class ManipulateArm(JointController):
     def inverseKinematics(self, coordinate):
         x = coordinate[0]
         y = coordinate[1]
-        l0 = self.arm_specification['Ground_Arm_Height'] #アームの高さ
-        l1 = self.arm_specification['Shoulder_Elbow_Length'] #肩から肘の長さ
-        l2 = self.arm_specification['Elbow_Wrist_Length'] #肘から手首の長さ
+        l0 = self.arm_specification['Ground_Arm_Height']        #アームの高さ
+        l1 = self.arm_specification['Shoulder_Elbow_Length']    #肩から肘の長さ
+        l2 = self.arm_specification['Elbow_Wrist_Length']       #肘から手首の長さ
         l3 = self.arm_specification['Wrist_Endeffector_Length'] #手首からエンドエフェクタの長さ
         x -= l3
         y -= l0
@@ -267,6 +267,7 @@ class ManipulateArm(JointController):
         print 'joint_angle'
         print joint_angle
         #非数かどうかを判定
+        #非数とは・・・「NaN (Not a Number) のこと. 数字じゃないということ」
         if numpy.nan in joint_angle: #非数かどうか確認
             return False
         #self.armController(joint_angle)
