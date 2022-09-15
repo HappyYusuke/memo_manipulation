@@ -48,21 +48,21 @@ class GraspingActionServer(ManipulateArm):
     def placeMode(self):#override
         self.base_control.translateDist(-0.15)                # 少し後退する
         rospy.sleep(1.0)
-        y = self.target_place[self.navigation_place] + 0.14   # Navigationに成功したときの物体の高さの座標
+        y = self.target_place[self.navigation_place] + 0.14   # Navigationに成功したときの家具の高さの座標
         #x = (y-0.78)/10+0.5
-        x = 0.5                                               # 水平距離
+        x = 0.5                                               # placeモード時のマニピュレータのx方向の長さ
         joint_angle = self.inverseKinematics([x, y])          # 逆運動学
         if numpy.nan in joint_angle:                          # 非数かどうか確認
             return False
 
-        self.armControllerByTopic(joint_angle)      # 物体を置く台の高さに合わせてマニピュレーション
+        self.armControllerByTopic(joint_angle)      # マニピュレーション
         rospy.sleep(2.5)
-        self.base_control.translateDist(0.3)        # 少し前進
+        self.base_control.translateDist(0.3)        # 前進
         rospy.sleep(1.0)
-        self.base_control.translateDist(0.1, 0.1)   # 少し前進 (物体に接触)
+        self.base_control.translateDist(0.1, 0.1)   # ゆっくり前進
         rospy.sleep(1.0)
 
-        joint_angle = self.inverseKinematics([x, y-0.03])   # 手先の位置を少し下げる計算
+        joint_angle = self.inverseKinematics([x, y-0.03])   # 物体を置くために手先の位置を下げる計算
         if not (numpy.nan in joint_angle):                  # 非数ではなかったらTrue
             self.armControllerByTopic(joint_angle)          # 手先の位置を少し下げるマニピュレーション
         rospy.sleep(2.5)
@@ -77,10 +77,11 @@ class GraspingActionServer(ManipulateArm):
     def approachObject(self,object_centroid):   # 引数はオブジェクトの重心の座標 
         if object_centroid.x > 1.5:   # オブジェクトまでの距離が1.5[m]だったらTrue
             return False
-        elif object_centroid.x < 0.5 or object_centroid.x > 0.8:
-            move_range = (object_centroid.x-0.65)
-            if abs(move_range) < 0.2: move_range = int(move_range/abs(move_range))*0.2
-            self.base_control.translateDist(move_range)
+        elif object_centroid.x < 0.5 or object_centroid.x > 0.8:   # オブジェクトまでの距離が x < 0.5 か 0.8 < x だったらTrue
+            move_range = (object_centroid.x-0.65)                  # オブジェクトに接近する距離（以下、接近距離）
+            if abs(move_range) < 0.2:                              # 接近距離の絶対値が0.2[m]未満ならTrue
+                move_range = int(move_range/abs(move_range))*0.2   # 
+            self.base_control.translateDist(move_range)            # オブジェクトに接近
             rospy.sleep(4.0)
             return False
         else :
@@ -89,33 +90,33 @@ class GraspingActionServer(ManipulateArm):
     def graspObject(self, object_centroid):
         rospy.loginfo('\n----- Grasp Object -----')
 
-        x = 0.475
+        x = 0.475                      # 物体把持時のマニピュレータのx方向の長さ
         #x = (y-0.75)/10+0.5
-        y = object_centroid.z + 0.03
+        y = object_centroid.z + 0.03   # オブジェクトの高さ
         '''
         if self.navigation_place == 'Null':
             y = object_centroid.z + 0.05
         else:
             y = self.target_place[self.navigation_place] + 0.10
         '''
-        joint_angle = self.inverseKinematics([x, y])
-        if numpy.nan in joint_angle:
+        joint_angle = self.inverseKinematics([x, y])   # 逆運動学
+        if numpy.nan in joint_angle:                   # 非数か確認
             return False
-        self.armControllerByTopic(joint_angle)
+        self.armControllerByTopic(joint_angle)         # 物体把持のフォームにマニピュレーション
         rospy.sleep(2.5)
 
-        move_range = object_centroid.x + 0.07 - x
-        self.base_control.translateDist(move_range*0.8, 0.15)
+        move_range = object_centroid.x + 0.07 - x               # 物体に接近する距離
+        self.base_control.translateDist(move_range*0.8, 0.15)   # 物体に接近
         rospy.sleep(0.5)
-        self.base_control.translateDist(move_range*0.2, 0.1)
+        self.base_control.translateDist(move_range*0.2, 0.1)    # 物体にゆっくり接近
         rospy.sleep(0.5)
 
-        grasp_flg = self.controlEndeffector(True)
+        grasp_flg = self.controlEndeffector(True)   # エンドエフェクタを閉じる
         rospy.sleep(1.0)
-        self.controlWrist(joint_angle[2]+45.0)
-        self.base_control.translateDist(-0.3)
+        self.controlWrist(joint_angle[2]+45.0)      # 手首を上方向に曲げる
+        self.base_control.translateDist(-0.3)       # 後退する
 
-        self.changeArmPose('carry')
+        self.changeArmPose('carry')   # carryモード
         rospy.sleep(4.0)
 
         '''
@@ -148,10 +149,10 @@ class GraspingActionServer(ManipulateArm):
         grasp_result = GraspingObjectResult()    # アクション通信の結果を代入
         grasp_flg = False                                     # Falseで初期化
         approach_flg = self.approachObject(target_centroid)   # オブジェクトに接近. 引数はRealSenseからの値(オブジェクトの重心の座標)
-        if approach_flg:
-            grasp_flg = self.graspObject(target_centroid)
-        grasp_result.result = grasp_flg
-        self.act.set_succeeded(grasp_result)
+        if approach_flg:                                      # オブジェクトへの接近が成功したらTrue
+            grasp_flg = self.graspObject(target_centroid)     # 物体把持
+        grasp_result.result = grasp_flg                       # 物体把持の結果を代入
+        self.act.set_succeeded(grasp_result)                  # set_succeeded()でSimpleActionServerにゴールしたことを伝える 
 
 
 if __name__ == '__main__':

@@ -11,9 +11,9 @@ from happymimi_manipulation_msgs.msg import GraspingObjectAction, GraspingObject
 from happymimi_manipulation_msgs.srv import RecognitionToGrasping
 
 class ResultState(Enum):
-    success = 1
-    wait = 2
-    failure = 3
+    success = 1   # 成功
+    wait = 2      # 待機
+    failure = 3   # 失敗
 
 class RecognitionAction(object):
     def __init__(self):
