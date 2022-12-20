@@ -15,6 +15,7 @@ class ResultState(Enum):
     wait = 2      # 待機
     failure = 3   # 失敗
 
+# 物体認識をするクラス
 class RecognitionAction(object):
     def __init__(self):
         self.recognition_feedback = ResultState.wait
@@ -38,6 +39,7 @@ class RecognitionAction(object):
 
         return result.result_flg, result.centroid_point
 
+# 物体把持をするクラス
 class GraspingAction(object):
     def __init__(self):
         pass
@@ -58,6 +60,7 @@ class GraspingAction(object):
 
         return result.result
 
+# 物体認識から物体把持をするメイン関数
 def actionMain(request):
     endeffector_pub = rospy.Publisher('/servo/endeffector',Bool,queue_size=1)
     head_pub = rospy.Publisher('/servo/head',Float64,queue_size=1)
@@ -87,5 +90,5 @@ def actionMain(request):
 
 if __name__ == '__main__':
     rospy.init_node('manipulation_master')
-    rospy.Service('/recognition_to_grasping', RecognitionToGrasping, actionMain)
+    rospy.Service('/recognition_to_grasping', RecognitionToGrasping, actionMain)  # 物体認識から物体把持の一連をするサービスサーバ
     rospy.spin()

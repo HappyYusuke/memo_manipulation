@@ -196,7 +196,7 @@ class JointController(MotorController):
         step = self.degToStep(deg) + (self.origin_angle[5]-2048)
         self.setPosition(5, step)
 
-
+# マニピュレーションをするクラス
 class ManipulateArm(JointController):
     def __init__(self):
         super(ManipulateArm,self).__init__()
