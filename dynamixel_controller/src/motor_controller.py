@@ -55,8 +55,8 @@ class MotorController(object):
         # (現在のパルス値) - (Originパルス値) = 現在のモータのパルス値
         current_deg_list = [x-y for (x,y) in zip(deg_current_pose, deg_origin_angle)]
         current_deg_list = [round(x, 1) for x in current_deg_list]  # 少数第2位を四捨五入
-        current_deg_list[2] *= -1  #? 
-        current_deg_list[5] *= -1  #?
+        current_deg_list[2] *= -1   
+        current_deg_list[5] *= -1  
         pub_deg_list = Float64MultiArray(data=current_deg_list)  # Float64MultiArray => ROSのリスト型
         self.motor_angle_pub.publish(pub_deg_list)  # パブリッシュ
 
@@ -201,27 +201,27 @@ class ManipulateArm(JointController):
     def __init__(self):
         super(ManipulateArm,self).__init__()
         rospy.Service('/servo/arm', StrTrg, self.changeArmPose)  # アーム全体を制御するサービスサーバ
-        rospy.Service('/servo/debug_arm', ArmControl, self.armControlService)  # わからん
+        rospy.Service('/servo/debug_arm', ArmControl, self.armControlService)  # 逆運動学でマニピュレーションを確認する用のサービスサーバ
         self.detect_depth = rospy.ServiceProxy('/detect/depth', PositionEstimator)  # 3次元位置推定結果を受け取るサービスクライアント
         self.arm_specification = rosparam.get_param('/mimi_specification')  # /dynamixel_controller/param
 
     # 逆運動学を計算するメソッド
     def inverseKinematics(self, coordinate):
-        x = coordinate[0]  # オブジェクトの画像の横方向
+        x = coordinate[0]  # mimiから見て進行方向が
         y = coordinate[1]  # 縦方向
         l0 = self.arm_specification['Ground_Arm_Height']  # 床から肩の高さ
         l1 = self.arm_specification['Shoulder_Elbow_Length']  # 肩から肘の長さ
         l2 = self.arm_specification['Elbow_Wrist_Length']  # 肘から手首の長さ
         l3 = self.arm_specification['Wrist_Endeffector_Length']  # 手首からエンドエフェクタの長さ
-        x -= l3  # オブジェクト座標から「手首からeefの長さ」を引く
-        y -= l0  # 
+        x -= l3  # 「手首からエンドエフェクタの長さ」を引く
+        y -= l0  # 「床から肩の高さ」を引く
 
         data1 =  x*x+y*y+l1*l1-l2*l2
         data2 =  2*l1*math.sqrt(x*x+y*y)
 
         try:
             #肩
-            shoulder_angle = -1*math.acos((x*x+y*y+l1*l1-l2*l2) / (2*l1*math.sqrt(x*x+y*y))) + math.atan(y/x)# -1倍の有無で別解
+            shoulder_angle = -1*math.acos((x*x+y*y+l1*l1-l2*l2) / (2*l1*math.sqrt(x*x+y*y))) + math.atan(y/x)  # -1倍の有無で別解
             #肘
             elbow_angle = math.atan((y-l1*math.sin(shoulder_angle))/(x-l1*math.cos(shoulder_angle)))-shoulder_angle
             #手首
@@ -234,7 +234,7 @@ class ManipulateArm(JointController):
             rospy.loginfo('can not move arm.')
             return [numpy.nan]*3
 
-    #アームを動かす(armControllerBytopicで並列処理できるからここは使われてない)
+    # アームを動かす(armControllerBytopicで並列処理できるからここは使われてない)
     def armController(self, joint_angle):
         try:
             joint_angle = joint_angle.data
@@ -249,19 +249,19 @@ class ManipulateArm(JointController):
         #rospy.sleep(0.5)
         thread_shoulder.start()
 
-    #アームをトピックで動かす
-    def armControllerByTopic(self, joint_angle): #joint_angleは逆運動学の計算結果
-        # Originの位置から各モータを何度動かすか計算する
+    # アームをトピックで動かすメソッド
+    def armControllerByTopic(self, joint_angle):  # joint_angleは逆運動学の計算結果
         m0, m1 = self.shoulderConversionProcess(joint_angle[0])
         m2 = self.elbowConversionProcess(joint_angle[1])
         m3 = self.wristConversionProcess(joint_angle[2])
 
-        print 'm0, m1, m2, m3'
-        print m0, m1, m2, m3
-        print map(math.degrees, [m0, m1, m2, m3]) #度数法に変換
-        self.motorPub(['m0_shoulder_left_joint', 'm1_shoulder_right_joint', 'm2_elbow_joint', 'm3_wrist_joint'], [m0, m1, m2, m3]) #アームを動かす
+        print('m0, m1, m2, m3')
+        print(m0, m1, m2, m3)  # 角モータの指令値を出力
+        print(map(math.degrees, [m0, m1, m2, m3]))  # 度数法に変換
+        self.motorPub(['m0_shoulder_left_joint', 'm1_shoulder_right_joint', 'm2_elbow_joint', 'm3_wrist_joint'], [m0, m1, m2, m3])  # アームを動かす
 
-    def armControlService(self, coordinate):  # サービスクライアントからの引数(座標)
+    # /servo/debug_arm のコールバックメソッド
+    def armControlService(self, coordinate):  # サービスクライアントからの引数(xとyのリスト)
         try:
             coordinate = coordinate.data
         except AttributeError:
@@ -269,13 +269,14 @@ class ManipulateArm(JointController):
         joint_angle = self.inverseKinematics(coordinate)  # 逆運動学を計算
         print('')
         print('joint_angle')
-        print(joint_angle)
+        print(joint_angle)  # 肩、肘、手首の計算結果を出力
         if numpy.nan in joint_angle: #非数かどうか確認(非数とは・・・「NaN (Not a Number) のこと. 数字じゃないということ」)
             return False
         #self.armController(joint_angle)
         self.armControllerByTopic(joint_angle)
         return True
 
+    # /servo/arm のコールバックメソッド
     def changeArmPose(self, cmd): #cmd: サービスクライアントからの引数(originとかcarryとか)
         if type(cmd) != str:
             cmd = cmd.data
@@ -304,14 +305,14 @@ class ManipulateArm(JointController):
         elbow_param = 0
         wrist_param = 0
         #self.armController([shoulder_param, elbow_param, wrist_param])
-        self.armControllerByTopic([shoulder_param, elbow_param, wrist_param])
+        self.armControllerByTopic([shoulder_param, elbow_param, wrist_param])  # originのマニピュレーション
 
     def carryMode(self):
         shoulder_param = -85
         elbow_param = 90
         wrist_param = 90
         #self.armController([shoulder_param, elbow_param, wrist_param])
-        self.armControllerByTopic([shoulder_param, elbow_param, wrist_param])
+        self.armControllerByTopic([shoulder_param, elbow_param, wrist_param])  # carryのマニピュレーション
 
     def receiveMode(self):
         self.controlHead(25)
@@ -320,11 +321,11 @@ class ManipulateArm(JointController):
         elbow_param = 70
         wrist_param = -30
         #self.armController([shoulder_param, elbow_param, wrist_param])
-        self.armControllerByTopic([shoulder_param, elbow_param, wrist_param])
+        self.armControllerByTopic([shoulder_param, elbow_param, wrist_param])  # receiveのマニピュレーション
         rospy.sleep(0.5)
-        self.controlEndeffector(False)
+        self.controlEndeffector(False)  # eefを開く
 
-        rospy.wait_for_service('/detect/depth')
+        rospy.wait_for_service('/detect/depth')  # 3次元位置推定のサービスサーバーを待機
         endeffector_res = False
         count = 0
         '''
@@ -341,27 +342,27 @@ class ManipulateArm(JointController):
             endeffector_res = self.controlEndeffector(True)
             rospy.sleep(1.5)
         '''
-        self.controlEndeffector(False)
+        self.controlEndeffector(False)  # eefを開く
         rospy.sleep(2.0)
         start_time = time.time()
-        straight_line_distance = 9.99
+        straight_line_distance = 9.99  # オブジェクトまでの距離(x方向)
         while time.time()-start_time<3.0 and straight_line_distance>0.42 and not rospy.is_shutdown():
             depth_res = self.detect_depth(280, 365)  # 画像のピクセル位置を指定してオブジェクトまでの深度を取得
-            straight_line_distance = depth_res.point.x
+            straight_line_distance = depth_res.point.x  # 三次元位置推定の結果を格納(x方向)
         rospy.sleep(0.5)
-        endeffector_res = self.controlEndeffector(True)
+        endeffector_res = self.controlEndeffector(True)  # eefを閉じる(オブジェクトを掴めたらTrue)
         rospy.sleep(1.5)
 
         self.carryMode()
-        self.controlHead(0)
-        return endeffector_res
+        self.controlHead(0)  # 首を真っ直ぐにする
+        return endeffector_res  # オブジェクトを掴めてたらTrue
 
     def giveMode(self):
         shoulder_param = -35
         elbow_param = 75
         wrist_param = -35
         #self.armController([shoulder_param, elbow_param, wrist_param])
-        self.armControllerByTopic([shoulder_param, elbow_param, wrist_param])
+        self.armControllerByTopic([shoulder_param, elbow_param, wrist_param])  # giveのマニピュレーション
         rospy.sleep(4.0)
         rospy.loginfo('give!!')
         '''
@@ -370,11 +371,11 @@ class ManipulateArm(JointController):
 
         rospy.sleep(1.0)
         '''
-        wrist_error = abs(self.torque_error[3])
+        wrist_error = abs(self.torque_error[3])  # 手首のモータの電流値の絶対値
         give_time = time.time()
         while abs(wrist_error - abs(self.torque_error[3])) < 10 and time.time() - give_time < 5.0 and not rospy.is_shutdown():
             pass
-        self.setPosition(4, self.origin_angle[4])
+        self.setPosition(4, self.origin_angle[4])  # eefを開く 
         rospy.sleep(0.5)
         self.carryMode()
 
